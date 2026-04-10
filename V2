@@ -1,1 +1,101 @@
 
+import random
+
+Solution = []
+compteur = 1
+for i in range(4):
+    ligne = []
+    for j in range(4):
+        if compteur == 16:
+            ligne.append(0) # 0 = vide
+        else:
+            ligne.append(compteur)
+            compteur += 1
+    Solution.append(ligne)
+
+grille = []
+for ligne in Solution:
+    grille.append(list(ligne))
+
+mouvements = {
+    'z': [-1, 0], # Haut   
+    's': [1, 0],  # Bas    
+    'q': [0, -1], # Gauche 
+    'd': [0, 1]   # Droite 
+}
+
+# --- Mélange de la grille ---
+for i in range(50):
+    ligne_A = random.randint(0, 3)
+    colonne_A = random.randint(0, 3)
+    
+    ligne_B = random.randint(0, 3)
+    colonne_B = random.randint(0, 3)
+    
+    grille[ligne_A][colonne_A], grille[ligne_B][colonne_B] = grille[ligne_B][colonne_B], grille[ligne_A][colonne_A]
+
+
+# --- DÉBUT DE LA NOUVELLE PARTIE ---
+
+def afficher_grille(g):
+    """Fonction pour afficher la grille de manière lisible"""
+    print("\n" + "-"*20)
+    for ligne in g:
+        # On remplace le 0 par un espace vide pour faire plus joli
+        affichage_ligne = [str(val).rjust(2) if val != 0 else "  " for val in ligne]
+        print(" | ".join(affichage_ligne))
+    print("-" * 20)
+
+# Boucle principale du jeu
+while True:
+    afficher_grille(grille)
+    
+    # Condition de victoire
+    if grille == Solution:
+        print("\nFélicitations ! Vous avez résolu le taquin !")
+        break
+
+    # 1. Trouver les coordonnées (ligne, colonne) de la case vide (0)
+    ligne_vide, col_vide = -1, -1
+    for i in range(4):
+        for j in range(4):
+            if grille[i][j] == 0:
+                ligne_vide, col_vide = i, j
+                break
+
+    # 2. Trouver les mouvements possibles
+    mouvements_possibles = {}
+    print("\nMouvements possibles :")
+    
+    for touche, (dl, dc) in mouvements.items():
+        nouvelle_ligne = ligne_vide + dl
+        nouvelle_col = col_vide + dc
+        
+        # On vérifie qu'on ne sort pas de la grille (limites de 0 à 3)
+        if 0 <= nouvelle_ligne < 4 and 0 <= nouvelle_col < 4:
+            mouvements_possibles[touche] = (nouvelle_ligne, nouvelle_col)
+            
+            # Affichage personnalisé selon la touche
+            if touche == 'z': print(" - 'z' pour déplacer le vide vers le Haut")
+            elif touche == 's': print(" - 's' pour déplacer le vide vers le Bas")
+            elif touche == 'q': print(" - 'q' pour déplacer le vide vers la Gauche")
+            elif touche == 'd': print(" - 'd' pour déplacer le vide vers la Droite")
+            
+    print(" - 'quitter' pour arrêter le jeu")
+
+    # 3. Demander le choix au joueur
+    choix = input("Votre choix : ").lower()
+
+    if choix == 'quitter':
+        print("Fin de la partie.")
+        break
+
+    # 4. Effectuer le déplacement
+    if choix in mouvements_possibles:
+        # On récupère les coordonnées de la case avec laquelle on va inverser le 0
+        cible_ligne, cible_col = mouvements_possibles[choix]
+        
+        # Inversion des deux cases
+        grille[ligne_vide][col_vide], grille[cible_ligne][cible_col] = grille[cible_ligne][cible_col], grille[ligne_vide][col_vide]
+    else:
+        print("\nMouvement invalide ou touche incorrecte. Veuillez réessayer.")
