@@ -1,0 +1,43 @@
+import random
+
+Solution = []
+compteur = 1
+for i in range(4):
+    ligne = []
+    for j in range(4):
+        if compteur == 16:
+            ligne.append(0) # 0 = vide
+        else:
+            ligne.append(compteur)
+            compteur += 1
+    Solution.append(ligne)
+
+
+grille = []
+for ligne in Solution:
+    grille.append(list(ligne))
+
+
+
+mouvements = {
+    'z': [-1, 0], # Haut   
+    's': [1, 0],  # Bas    
+    'q': [0, -1], # Gauche 
+    'd': [0, 1]   # Droite 
+}
+
+print (Solution)
+print (grille)
+
+for i in range(50):
+    ligne_A = random.randint(0, 3)
+    colonne_A = random.randint(0, 3)
+    
+    ligne_B = random.randint(0, 3)
+    colonne_B = random.randint(0, 3)
+    
+    grille[ligne_A][colonne_A], grille[ligne_B][colonne_B] = grille[ligne_B][colonne_B], grille[ligne_A][colonne_A]
+
+print(grille)
+
+    
