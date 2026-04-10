@@ -40,4 +40,48 @@ for i in range(50):
 
 print(grille)
 
-    
+
+def trouver_vide(grille):
+    """Retourne la position (ligne, col) de la case vide (0)"""
+    for i in range(TAILLE):
+        for j in range(TAILLE):
+            if grille[i][j] == 0:
+                return (i, j)
+    return None
+
+def mouvements_possibles(grille):
+    """
+    Retourne un dictionnaire des mouvements possibles
+    Clé = direction, Valeur = position de la pièce à déplacer
+    Utilisation du cours : DICTIONNAIRES
+    """
+    li, col = trouver_vide(grille)
+    moves = {}
+
+    if li > 0:
+        moves["haut"] = (li - 1, col)
+    if li < TAILLE - 1:
+        moves["bas"] = (li + 1, col)
+    if col > 0:
+        moves["gauche"] = (li, col - 1)
+    if col < TAILLE - 1:
+        moves["droite"] = (li, col + 1)
+
+    return moves
+
+def deplacer(grille, direction):
+    """Déplace une pièce dans la direction donnée si possible"""
+    moves = mouvements_possibles(grille)
+    if direction not in moves:
+        return False
+
+    li_vide, col_vide = trouver_vide(grille)
+    li_piece, col_piece = moves[direction]
+
+    # Échange la pièce avec la case vide
+    grille[li_vide][col_vide] = grille[li_piece][col_piece]
+    grille[li_piece][col_piece] = 0
+    return True
+
+
+
