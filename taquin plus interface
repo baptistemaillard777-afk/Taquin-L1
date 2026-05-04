@@ -1,0 +1,357 @@
+# ============================================================
+# JEU DU TAQUIN - Version FINALE
+# Concepts utilisés : listes/tableaux, fonctions modulaires,
+#                     dictionnaires, interface tkinter
+# ============================================================
+
+import tkinter as tk
+import random
+import time
+
+# ============================================================
+# MODULE : Logique du jeu
+# ============================================================
+
+TAILLE = 3
+
+def creer_grille():
+    grille = []
+    compteur = 1
+    for i in range(TAILLE):
+        ligne = []
+        for j in range(TAILLE):
+            if i == TAILLE - 1 and j == TAILLE - 1:
+                ligne.append(0)
+            else:
+                ligne.append(compteur)
+            compteur += 1
+        grille.append(ligne)
+    return grille
+
+def melanger_grille(grille):
+    for _ in range(300):
+        moves = mouvements_possibles(grille)
+        direction = random.choice(list(moves.keys()))
+        deplacer(grille, direction)
+    return grille
+
+def trouver_vide(grille):
+    for i in range(TAILLE):
+        for j in range(TAILLE):
+            if grille[i][j] == 0:
+                return (i, j)
+    return None
+
+def mouvements_possibles(grille):
+    li, col = trouver_vide(grille)
+    moves = {}
+    if li > 0:
+        moves["haut"] = (li - 1, col)
+    if li < TAILLE - 1:
+        moves["bas"] = (li + 1, col)
+    if col > 0:
+        moves["gauche"] = (li, col - 1)
+    if col < TAILLE - 1:
+        moves["droite"] = (li, col + 1)
+    return moves
+
+def deplacer(grille, direction):
+    moves = mouvements_possibles(grille)
+    if direction not in moves:
+        return False
+    li_vide, col_vide = trouver_vide(grille)
+    li_piece, col_piece = moves[direction]
+    grille[li_vide][col_vide] = grille[li_piece][col_piece]
+    grille[li_piece][col_piece] = 0
+    return True
+
+def est_gagne(grille):
+    return grille == creer_grille()
+
+# ============================================================
+# MODULE : Interface graphique tkinter
+# ============================================================
+
+# Palette de couleurs
+COULEURS = {
+    "bg":           "#0f0f1a",
+    "surface":      "#1a1a2e",
+    "accent":       "#e94560",
+    "accent2":      "#0f3460",
+    "tile_bg":      "#16213e",
+    "tile_hover":   "#e94560",
+    "tile_text":    "#eaeaea",
+    "vide":         "#0a0a14",
+    "texte":        "#eaeaea",
+    "texte_dim":    "#556080",
+    "victoire":     "#00d4aa",
+}
+
+TAILLE_CASE = 120
+PADDING = 12
+
+class TaquinApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Jeu du Taquin")
+        self.root.configure(bg=COULEURS["bg"])
+        self.root.resizable(False, False)
+
+        self.etat = {
+            "grille": creer_grille(),
+            "nb_coups": 0,
+            "partie_en_cours": False,
+            "temps_debut": None,
+        }
+
+        self._creer_interface()
+        self._nouvelle_partie()
+
+        self.root.bind("<Up>",    lambda e: self._jouer("haut"))
+        self.root.bind("<Down>",  lambda e: self._jouer("bas"))
+        self.root.bind("<Left>",  lambda e: self._jouer("gauche"))
+        self.root.bind("<Right>", lambda e: self._jouer("droite"))
+
+        self._tick_chrono()
+
+    # ---- Construction de l'interface ----
+
+    def _creer_interface(self):
+        # En-tête
+        header = tk.Frame(self.root, bg=COULEURS["bg"])
+        header.pack(fill="x", padx=30, pady=(25, 5))
+
+        tk.Label(
+            header,
+            text="TAQUIN",
+            font=("Georgia", 36, "bold"),
+            bg=COULEURS["bg"],
+            fg=COULEURS["accent"],
+        ).pack(side="left")
+
+        tk.Label(
+            header,
+            text="puzzle",
+            font=("Georgia", 14, "italic"),
+            bg=COULEURS["bg"],
+            fg=COULEURS["texte_dim"],
+        ).pack(side="left", padx=(8, 0), pady=(18, 0))
+
+        # Stats (coups + chrono)
+        stats = tk.Frame(self.root, bg=COULEURS["bg"])
+        stats.pack(fill="x", padx=30, pady=(0, 10))
+
+        cadre_coups = tk.Frame(stats, bg=COULEURS["surface"], padx=18, pady=8)
+        cadre_coups.pack(side="left", padx=(0, 10))
+        tk.Label(cadre_coups, text="COUPS", font=("Courier", 9), bg=COULEURS["surface"], fg=COULEURS["texte_dim"]).pack()
+        self.label_coups = tk.Label(cadre_coups, text="0", font=("Courier", 22, "bold"), bg=COULEURS["surface"], fg=COULEURS["texte"])
+        self.label_coups.pack()
+
+        cadre_temps = tk.Frame(stats, bg=COULEURS["surface"], padx=18, pady=8)
+        cadre_temps.pack(side="left")
+        tk.Label(cadre_temps, text="TEMPS", font=("Courier", 9), bg=COULEURS["surface"], fg=COULEURS["texte_dim"]).pack()
+        self.label_temps = tk.Label(cadre_temps, text="00:00", font=("Courier", 22, "bold"), bg=COULEURS["surface"], fg=COULEURS["texte"])
+        self.label_temps.pack()
+
+        # Grille canvas
+        taille_canvas = TAILLE * TAILLE_CASE + (TAILLE + 1) * PADDING
+        self.canvas = tk.Canvas(
+            self.root,
+            width=taille_canvas,
+            height=taille_canvas,
+            bg=COULEURS["surface"],
+            highlightthickness=0,
+        )
+        self.canvas.pack(padx=30, pady=5)
+        self.canvas.bind("<Button-1>", self._clic_canvas)
+        self.canvas.bind("<Motion>", self._hover_canvas)
+
+        self._pos_survol = None
+
+        # Message victoire
+        self.label_victoire = tk.Label(
+            self.root,
+            text="",
+            font=("Georgia", 13, "italic"),
+            bg=COULEURS["bg"],
+            fg=COULEURS["victoire"],
+        )
+        self.label_victoire.pack(pady=4)
+
+        # Bouton nouvelle partie
+        btn = tk.Button(
+            self.root,
+            text="⟳  Nouvelle partie",
+            font=("Courier", 11, "bold"),
+            bg=COULEURS["accent"],
+            fg="white",
+            activebackground="#c73652",
+            activeforeground="white",
+            relief="flat",
+            padx=20,
+            pady=10,
+            cursor="hand2",
+            command=self._nouvelle_partie,
+        )
+        btn.pack(pady=(4, 20))
+
+        # Instructions
+        tk.Label(
+            self.root,
+            text="Cliquez sur une pièce adjacente au vide  •  Flèches du clavier",
+            font=("Courier", 9),
+            bg=COULEURS["bg"],
+            fg=COULEURS["texte_dim"],
+        ).pack(pady=(0, 15))
+
+    # ---- Dessin de la grille ----
+
+    def _afficher_grille(self):
+        self.canvas.delete("all")
+        grille = self.etat["grille"]
+        li_vide, col_vide = trouver_vide(grille)
+
+        for i in range(TAILLE):
+            for j in range(TAILLE):
+                val = grille[i][j]
+                x1 = PADDING + j * (TAILLE_CASE + PADDING)
+                y1 = PADDING + i * (TAILLE_CASE + PADDING)
+                x2 = x1 + TAILLE_CASE
+                y2 = y1 + TAILLE_CASE
+
+                if val == 0:
+                    # Case vide
+                    self.canvas.create_rectangle(
+                        x1, y1, x2, y2,
+                        fill=COULEURS["vide"],
+                        outline=COULEURS["surface"],
+                        width=2,
+                    )
+                else:
+                    # Vérifie si survolée
+                    est_survol = (self._pos_survol == (i, j))
+                    # Vérifie si adjacente au vide (cliquable)
+                    est_adjacente = (
+                        (abs(i - li_vide) == 1 and j == col_vide) or
+                        (abs(j - col_vide) == 1 and i == li_vide)
+                    )
+
+                    if est_survol and est_adjacente:
+                        couleur_fond = COULEURS["accent"]
+                        couleur_texte = "white"
+                    elif est_adjacente:
+                        couleur_fond = "#1e2d50"
+                        couleur_texte = COULEURS["texte"]
+                    else:
+                        couleur_fond = COULEURS["tile_bg"]
+                        couleur_texte = COULEURS["texte"]
+
+                    # Ombre portée
+                    self.canvas.create_rectangle(
+                        x1+4, y1+4, x2+4, y2+4,
+                        fill="#07070f", outline="",
+                    )
+                    # Tuile
+                    self.canvas.create_rectangle(
+                        x1, y1, x2, y2,
+                        fill=couleur_fond,
+                        outline=COULEURS["accent"] if est_adjacente else COULEURS["accent2"],
+                        width=2,
+                    )
+                    # Numéro
+                    self.canvas.create_text(
+                        (x1 + x2) // 2,
+                        (y1 + y2) // 2,
+                        text=str(val),
+                        font=("Georgia", 34, "bold"),
+                        fill=couleur_texte,
+                    )
+
+    # ---- Interactions ----
+
+    def _coord_vers_case(self, x, y):
+        """Convertit des coordonnées pixel en (ligne, col) de la grille"""
+        col = (x - PADDING) // (TAILLE_CASE + PADDING)
+        li  = (y - PADDING) // (TAILLE_CASE + PADDING)
+        if 0 <= li < TAILLE and 0 <= col < TAILLE:
+            # Vérifie qu'on est bien dans la case et pas dans le padding
+            x1 = PADDING + col * (TAILLE_CASE + PADDING)
+            y1 = PADDING + li  * (TAILLE_CASE + PADDING)
+            if x1 <= x <= x1 + TAILLE_CASE and y1 <= y <= y1 + TAILLE_CASE:
+                return (li, col)
+        return None
+
+    def _hover_canvas(self, event):
+        pos = self._coord_vers_case(event.x, event.y)
+        if pos != self._pos_survol:
+            self._pos_survol = pos
+            self._afficher_grille()
+
+    def _clic_canvas(self, event):
+        if not self.etat["partie_en_cours"]:
+            return
+        pos = self._coord_vers_case(event.x, event.y)
+        if pos is None:
+            return
+        li, col = pos
+        li_vide, col_vide = trouver_vide(self.etat["grille"])
+
+        direction = None
+        if li == li_vide - 1 and col == col_vide:
+            direction = "bas"
+        elif li == li_vide + 1 and col == col_vide:
+            direction = "haut"
+        elif li == li_vide and col == col_vide - 1:
+            direction = "droite"
+        elif li == li_vide and col == col_vide + 1:
+            direction = "gauche"
+
+        if direction:
+            self._jouer(direction)
+
+    def _jouer(self, direction):
+        if not self.etat["partie_en_cours"]:
+            return
+        if deplacer(self.etat["grille"], direction):
+            self.etat["nb_coups"] += 1
+            self.label_coups.config(text=str(self.etat["nb_coups"]))
+            self._afficher_grille()
+            if est_gagne(self.etat["grille"]):
+                self.etat["partie_en_cours"] = False
+                coups = self.etat["nb_coups"]
+                t = int(time.time() - self.etat["temps_debut"])
+                self.label_victoire.config(
+                    text=f"✓  Résolu en {coups} coups et {t}s — Bravo !"
+                )
+
+    # ---- Chronomètre ----
+
+    def _tick_chrono(self):
+        if self.etat["partie_en_cours"] and self.etat["temps_debut"]:
+            t = int(time.time() - self.etat["temps_debut"])
+            m, s = divmod(t, 60)
+            self.label_temps.config(text=f"{m:02d}:{s:02d}")
+        self.root.after(500, self._tick_chrono)
+
+    # ---- Nouvelle partie ----
+
+    def _nouvelle_partie(self):
+        self.etat["grille"] = creer_grille()
+        melanger_grille(self.etat["grille"])
+        self.etat["nb_coups"] = 0
+        self.etat["partie_en_cours"] = True
+        self.etat["temps_debut"] = time.time()
+        self.label_coups.config(text="0")
+        self.label_temps.config(text="00:00")
+        self.label_victoire.config(text="")
+        self._afficher_grille()
+
+
+# ============================================================
+# MODULE PRINCIPAL
+# ============================================================
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = TaquinApp(root)
+    root.mainloop()
