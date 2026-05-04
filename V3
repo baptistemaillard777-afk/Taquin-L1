@@ -1,0 +1,309 @@
+import tkinter as tk
+import random
+import time
+import json
+import os
+
+
+
+
+
+
+
+# ============================================================
+# MODULE : Logique du jeu
+# ============================================================
+
+TAILLE = 3
+
+def creer_grille():
+    grille = []
+    compteur = 1
+    for i in range(TAILLE):
+        ligne = []
+        for j in range(TAILLE):
+            if i == TAILLE - 1 and j == TAILLE - 1:
+                ligne.append(0)
+            else:
+                ligne.append(compteur)
+            compteur += 1
+        grille.append(ligne)
+    return grille
+
+def melanger_grille(grille):
+    for _ in range(300):
+        moves = mouvements_possibles(grille)
+        direction = random.choice(list(moves.keys()))
+        deplacer(grille, direction)
+    return grille
+
+def trouver_vide(grille):
+    for i in range(TAILLE):
+        for j in range(TAILLE):
+            if grille[i][j] == 0:
+                return (i, j)
+    return None
+
+def mouvements_possibles(grille):
+    li, col = trouver_vide(grille)
+    moves = {}
+    if li > 0:
+        moves["haut"] = (li - 1, col)
+    if li < TAILLE - 1:
+        moves["bas"] = (li + 1, col)
+    if col > 0:
+        moves["gauche"] = (li, col - 1)
+    if col < TAILLE - 1:
+        moves["droite"] = (li, col + 1)
+    return moves
+
+def deplacer(grille, direction):
+    moves = mouvements_possibles(grille)
+    if direction not in moves:
+        return False
+    li_vide, col_vide = trouver_vide(grille)
+    li_piece, col_piece = moves[direction]
+    grille[li_vide][col_vide] = grille[li_piece][col_piece]
+    grille[li_piece][col_piece] = 0
+    return True
+
+def est_gagne(grille):
+    return grille == creer_grille()
+
+
+
+
+
+
+
+
+
+
+
+# ============================================================
+# MODULE : Interface graphique tkinter
+# ============================================================
+
+COULEURS = {
+    "bg":           "#0f0f1a",
+    "surface":      "#1a1a2e",
+    "accent":       "#e94560",
+    "accent2":      "#0f3460",
+    "tile_bg":      "#16213e",
+    "tile_text":    "#eaeaea",
+    "vide":         "#0a0a14",
+    "texte":        "#eaeaea",
+    "texte_dim":    "#556080",
+    "victoire":     "#00d4aa",
+    "btn_sec":      "#252545"
+}
+
+TAILLE_CASE = 120
+PADDING = 12
+FICHIER_SAVE = "sauvegarde_taquin.json"
+
+class TaquinApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Jeu du Taquin Pro")
+        self.root.configure(bg=COULEURS["bg"])
+        self.root.resizable(False, False)
+
+        self.etat = {
+            "grille": creer_grille(),
+            "nb_coups": 0,
+            "partie_en_cours": False,
+            "temps_accumule": 0,
+            "temps_debut_session": None,
+            "historique": []  # Pour le bouton retour
+        }
+
+        self._creer_interface()
+        self._nouvelle_partie()
+
+        self.root.bind("<Up>",    lambda e: self._jouer("haut"))
+        self.root.bind("<Down>",  lambda e: self._jouer("bas"))
+        self.root.bind("<Left>",  lambda e: self._jouer("gauche"))
+        self.root.bind("<Right>", lambda e: self._jouer("droite"))
+
+        self._tick_chrono()
+
+    def _creer_interface(self):
+        # En-tête
+        header = tk.Frame(self.root, bg=COULEURS["bg"])
+        header.pack(fill="x", padx=30, pady=(25, 5))
+
+        tk.Label(header, text="TAQUIN", font=("Georgia", 36, "bold"), bg=COULEURS["bg"], fg=COULEURS["accent"]).pack(side="left")
+
+        # Stats
+        stats = tk.Frame(self.root, bg=COULEURS["bg"])
+        stats.pack(fill="x", padx=30, pady=(0, 10))
+
+        for label_text, attr_name in [("COUPS", "label_coups"), ("TEMPS", "label_temps")]:
+            cadre = tk.Frame(stats, bg=COULEURS["surface"], padx=18, pady=8)
+            cadre.pack(side="left", padx=5)
+            tk.Label(cadre, text=label_text, font=("Courier", 9), bg=COULEURS["surface"], fg=COULEURS["texte_dim"]).pack()
+            setattr(self, attr_name, tk.Label(cadre, text="0", font=("Courier", 22, "bold"), bg=COULEURS["surface"], fg=COULEURS["texte"]))
+            getattr(self, attr_name).pack()
+
+        # Canvas
+        taille_canvas = TAILLE * TAILLE_CASE + (TAILLE + 1) * PADDING
+        self.canvas = tk.Canvas(self.root, width=taille_canvas, height=taille_canvas, bg=COULEURS["surface"], highlightthickness=0)
+        self.canvas.pack(padx=30, pady=5)
+        self.canvas.bind("<Button-1>", self._clic_canvas)
+        self.canvas.bind("<Motion>", self._hover_canvas)
+        self._pos_survol = None
+
+        self.label_victoire = tk.Label(self.root, text="", font=("Georgia", 13, "italic"), bg=COULEURS["bg"], fg=COULEURS["victoire"])
+        self.label_victoire.pack(pady=4)
+
+        # Barre d'outils (Retour, Sauvegarde, Chargement)
+        toolbar = tk.Frame(self.root, bg=COULEURS["bg"])
+        toolbar.pack(fill="x", padx=30, pady=5)
+
+        self.btn_retour = self._creer_bouton(toolbar, "⟲ Retour", self._annuler_coup, COULEURS["btn_sec"])
+        self.btn_retour.pack(side="left", expand=True, padx=2)
+
+        self._creer_bouton(toolbar, "💾 Save", self._sauvegarder, COULEURS["btn_sec"]).pack(side="left", expand=True, padx=2)
+        self._creer_bouton(toolbar, "📂 Load", self._charger, COULEURS["btn_sec"]).pack(side="left", expand=True, padx=2)
+
+        # Bouton Nouvelle Partie
+        self._creer_bouton(self.root, "⟳  Nouvelle partie", self._nouvelle_partie, COULEURS["accent"]).pack(pady=(10, 20))
+
+    def _creer_bouton(self, parent, texte, commande, couleur):
+        return tk.Button(parent, text=texte, font=("Courier", 10, "bold"), bg=couleur, fg="white", 
+                         activebackground=COULEURS["accent2"], relief="flat", padx=15, pady=8, 
+                         cursor="hand2", command=commande)
+
+    def _afficher_grille(self):
+        self.canvas.delete("all")
+        grille = self.etat["grille"]
+        li_vide, col_vide = trouver_vide(grille)
+
+        for i in range(TAILLE):
+            for j in range(TAILLE):
+                val = grille[i][j]
+                x1, y1 = PADDING + j*(TAILLE_CASE+PADDING), PADDING + i*(TAILLE_CASE+PADDING)
+                x2, y2 = x1 + TAILLE_CASE, y1 + TAILLE_CASE
+
+                if val != 0:
+                    est_adjacente = (abs(i - li_vide) == 1 and j == col_vide) or (abs(j - col_vide) == 1 and i == li_vide)
+                    couleur_fond = COULEURS["accent"] if (self._pos_survol == (i, j) and est_adjacente) else COULEURS["tile_bg"]
+                    
+                    self.canvas.create_rectangle(x1+4, y1+4, x2+4, y2+4, fill="#07070f", outline="") # Ombre
+                    self.canvas.create_rectangle(x1, y1, x2, y2, fill=couleur_fond, 
+                                                 outline=COULEURS["accent"] if est_adjacente else COULEURS["accent2"], width=2)
+                    self.canvas.create_text((x1+x2)//2, (y1+y2)//2, text=str(val), font=("Georgia", 34, "bold"), fill=COULEURS["texte"])
+
+
+
+
+
+
+
+    # ---- Nouvelles Fonctionnalités ----
+
+    def _annuler_coup(self):
+        if not self.etat["partie_en_cours"] or not self.etat["historique"]:
+            return
+        # On récupère le dernier état de la grille
+        derniere_grille = self.etat["historique"].pop()
+        self.etat["grille"] = derniere_grille
+        self.etat["nb_coups"] -= 1
+        self.label_coups.config(text=str(self.etat["nb_coups"]))
+        self._afficher_grille()
+
+    def _sauvegarder(self):
+        # Calcul du temps total avant sauvegarde
+        temps_actuel = self.etat["temps_accumule"]
+        if self.etat["partie_en_cours"]:
+            temps_actuel += int(time.time() - self.etat["temps_debut_session"])
+        
+        data = {
+            "grille": self.etat["grille"],
+            "nb_coups": self.etat["nb_coups"],
+            "temps": temps_actuel,
+            "historique": self.etat["historique"]
+        }
+        with open(FICHIER_SAVE, "w") as f:
+            json.dump(data, f)
+        self.label_victoire.config(text="💾 Partie sauvegardée !", fg=COULEURS["texte"])
+
+    def _charger(self):
+        if not os.path.exists(FICHIER_SAVE):
+            return
+        with open(FICHIER_SAVE, "r") as f:
+            data = json.load(f)
+        
+        self.etat["grille"] = data["grille"]
+        self.etat["nb_coups"] = data["nb_coups"]
+        self.etat["temps_accumule"] = data["temps"]
+        self.etat["historique"] = data["historique"]
+        self.etat["temps_debut_session"] = time.time()
+        self.etat["partie_en_cours"] = True
+        
+        self.label_coups.config(text=str(self.etat["nb_coups"]))
+        self.label_victoire.config(text="📂 Partie chargée", fg=COULEURS["texte"])
+        self._afficher_grille()
+
+    def _jouer(self, direction):
+        if not self.etat["partie_en_cours"]: return
+        
+        # Sauvegarde de l'état actuel dans l'historique AVANT le mouvement
+        copie_grille = [ligne[:] for ligne in self.etat["grille"]]
+        
+        if deplacer(self.etat["grille"], direction):
+            self.etat["historique"].append(copie_grille)
+            # Limiter l'historique aux 50 derniers coups pour la mémoire
+            if len(self.etat["historique"]) > 50: self.etat["historique"].pop(0)
+            
+            self.etat["nb_coups"] += 1
+            self.label_coups.config(text=str(self.etat["nb_coups"]))
+            self._afficher_grille()
+            if est_gagne(self.etat["grille"]):
+                self.etat["partie_en_cours"] = False
+                self.label_victoire.config(text="✓ Bravo ! Puzzle résolu.", fg=COULEURS["victoire"])
+
+    def _tick_chrono(self):
+        if self.etat["partie_en_cours"]:
+            total_sec = self.etat["temps_accumule"] + int(time.time() - self.etat["temps_debut_session"])
+            m, s = divmod(total_sec, 60)
+            self.label_temps.config(text=f"{m:02d}:{s:02d}")
+        self.root.after(500, self._tick_chrono)
+
+    def _nouvelle_partie(self):
+        self.etat["grille"] = melanger_grille(creer_grille())
+        self.etat["nb_coups"] = 0
+        self.etat["temps_accumule"] = 0
+        self.etat["temps_debut_session"] = time.time()
+        self.etat["historique"] = []
+        self.etat["partie_en_cours"] = True
+        self.label_coups.config(text="0")
+        self.label_victoire.config(text="")
+        self._afficher_grille()
+
+    def _coord_vers_case(self, x, y):
+        col, li = (x - PADDING) // (TAILLE_CASE + PADDING), (y - PADDING) // (TAILLE_CASE + PADDING)
+        if 0 <= li < TAILLE and 0 <= col < TAILLE:
+            return (li, col)
+        return None
+
+    def _hover_canvas(self, event):
+        pos = self._coord_vers_case(event.x, event.y)
+        if pos != self._pos_survol:
+            self._pos_survol = pos
+            self._afficher_grille()
+
+    def _clic_canvas(self, event):
+        if not self.etat["partie_en_cours"]: return
+        pos = self._coord_vers_case(event.x, event.y)
+        if not pos: return
+        li, col = pos
+        li_v, col_v = trouver_vide(self.etat["grille"])
+        diag = {(li_v-1, col_v): "bas", (li_v+1, col_v): "haut", (li_v, col_v-1): "droite", (li_v, col_v+1): "gauche"}
+        if (li, col) in diag: self._jouer(diag[(li, col)])
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = TaquinApp(root)
+    root.mainloop()
