@@ -81,7 +81,7 @@ def est_gagne(grille):
 
 
 # ============================================================
-# MODULE : Interface graphique tkinter
+# MODULE : Interface graphique tkinter en partie faite a l'aide de l'ia
 # ============================================================
 
 COULEURS = {
@@ -201,7 +201,7 @@ class TaquinApp:
 
 
 
-    # ---- Nouvelles Fonctionnalités ----
+    # ---- Nouvelles Fonctionnalités ---- en partie faite a l'aide de l'ia
 
     def _annuler_coup(self):
         if not self.etat["partie_en_cours"] or not self.etat["historique"]:
